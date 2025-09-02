@@ -131,12 +131,16 @@ private:
             RECT window = { 0 };
             GetClientRect(hwnd_, &window);
 
-            constexpr int borderHeight = 8; // TODO: dynamic get with GetSystemMetrics(SM_CYFRAME) + GetSystemMetrics(SM_CXPADDEDBORDER)
-            int borderTop = window.top;
-            int borderBottom = window.top + borderHeight;
-            
-            if (borderTop <= pt.y && pt.y <= borderBottom)
+            constexpr int borderWidth = 8; // TODO: dynamic get with GetSystemMetrics(SM_CXFRAME) + GetSystemMetrics(SM_CXPADDEDBORDER)
+            constexpr int borderHeight = 8; // TODO: dynamic get with GetSystemMetrics(SM_CYFRAME) + GetSystemMetrics(SM_CYPADDEDBORDER)
+            if (pt.y <= window.top + borderHeight)
+            {
+                if (pt.x <= window.left + borderWidth)
+                    return HTTOPLEFT; // top-left resize
+                if (window.right - borderWidth <= pt.x)
+                    return HTTOPRIGHT; // top-right resize
                 return HTTOP; // top resize
+            }
 
             if (PtInRect(&dragMoveArea_, pt))
                 return HTCAPTION; // title bar (drag move, double-click maximize)
