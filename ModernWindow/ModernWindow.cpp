@@ -14,6 +14,8 @@ using namespace std;
 class ModernWindow
 {
 public:
+    static constexpr LPCWSTR ClassName = L"ModernWindow";
+
     static void registerWindowClass(HINSTANCE hInst)
     {
         WNDCLASSEX wc = { 0 };
@@ -24,7 +26,7 @@ public:
         wc.hInstance = hInst;
         wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
         wc.hbrBackground = (HBRUSH)(COLOR_WINDOWFRAME);
-        wc.lpszClassName = className();
+        wc.lpszClassName = ClassName;
         RegisterClassEx(&wc);
     }
 
@@ -32,19 +34,17 @@ public:
         : hwnd_(NULL)
         , dragMoveArea_{ 0 }
         , snapLayoutsArea_{ 0 }
-        , resizeBorder_{ 0 }
     {
     
     }
 
     bool create(HINSTANCE hinst, LPCWSTR title)
     {
-        hwnd_ = CreateWindowEx(0, className(), title, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, nullptr, nullptr, hinst, nullptr);
+        hwnd_ = CreateWindowEx(0, ClassName, title, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, nullptr, nullptr, hinst, nullptr);
         if (hwnd_)
         {
             SetWindowLongPtr(hwnd_, GWLP_USERDATA, (LONG_PTR)this); // bind this
-            MARGINS frame = { 1,1,0,1 };
-            DwmExtendFrameIntoClientArea(hwnd_, &frame); // make it frameless but has shadow
+            // make WM_NCCALCSIZE message
             SetWindowPos(hwnd_, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOZORDER | SWP_FRAMECHANGED);
         }
         return hwnd_ != NULL;
@@ -57,11 +57,6 @@ public:
     }
     
 private:
-    static LPCWSTR className()
-    {
-        return L"ModernWindow";
-    }
-
     static LRESULT CALLBACK windowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     {
         auto self = (ModernWindow*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
@@ -72,19 +67,17 @@ private:
 
     LRESULT thisWindowProc(UINT msg, WPARAM wp, LPARAM lp)
     {
-        constexpr int SnapAreaWidth = 100;
-        constexpr int SnapAreaHeight = 50;
-        constexpr int DragMoveAreaHeight = 50;
-        constexpr int ResizeBorderWidth = 10;
-
         switch (msg)
         {
-        case WM_SIZE:
+        case WM_WINDOWPOSCHANGED:
         {
-            RECT window;
-            GetWindowRect(hwnd_, &window);
+            RECT window = { 0 };
+            GetClientRect(hwnd_, &window);
+
             int width = window.right - window.left;
-            int height = window.bottom - window.top;
+            constexpr int SnapAreaWidth = 100;
+            constexpr int SnapAreaHeight = 50;
+            constexpr int DragMoveAreaHeight = 50;
 
             dragMoveArea_.left = 0;
             dragMoveArea_.right = width - SnapAreaWidth;
@@ -96,34 +89,33 @@ private:
             snapLayoutsArea_.top = 0;
             snapLayoutsArea_.bottom = SnapAreaHeight;
 
-            resizeBorder_ = { ResizeBorderWidth, ResizeBorderWidth, ResizeBorderWidth,ResizeBorderWidth };
-            return 0;
+            break;
         }
         case WM_NCCALCSIZE:
         {
-            // fix maximize size
-            if (wp && IsMaximized(hwnd_))
+            if (wp)
             {
-                HMONITOR monitor = MonitorFromWindow(hwnd_, MONITOR_DEFAULTTONULL);
-                if (monitor)
+                NCCALCSIZE_PARAMS* params = (NCCALCSIZE_PARAMS*)lp;
+                if (IsMaximized(hwnd_))
                 {
-                    MONITORINFO info = { 0 };
-                    info.cbSize = sizeof(MONITORINFO);
-                    if (GetMonitorInfo(monitor, &info))
-                    {
-                        NCCALCSIZE_PARAMS* params = (NCCALCSIZE_PARAMS*)lp;
-                        params->rgrc[0] = info.rcWork;
-                    }
+                    // use monitor rect for maximized
+                    params->rgrc[0] = getMonitorRectOr(params->rgrc[0]);
+                    return 0;
                 }
+
+                RECT origin = params->rgrc[0]; // origin is borderless
+                LRESULT defRet = DefWindowProc(hwnd_, msg, wp, lp);
+                params->rgrc[0].top = origin.top; // restore top borderless
+                return defRet;
             }
-            return 0;
+            break;
         }
         case WM_NCLBUTTONDOWN:
         case WM_NCLBUTTONUP:
         {
             if (wp == HTMAXBUTTON)
             {
-                // translate to normal mouse button event
+                // translate to normal mouse button event (reject maximize button)
                 POINT pt = { GET_X_LPARAM(lp), GET_Y_LPARAM(lp) };
                 ScreenToClient(hwnd_, &pt);
                 SendMessage(hwnd_, msg == WM_NCLBUTTONDOWN ? WM_LBUTTONDOWN : WM_LBUTTONUP, MK_LBUTTON, MAKELPARAM(pt.x, pt.y));
@@ -136,13 +128,23 @@ private:
             POINT pt = { GET_X_LPARAM(lp), GET_Y_LPARAM(lp) };
             ScreenToClient(hwnd_, &pt);
 
+            RECT window = { 0 };
+            GetClientRect(hwnd_, &window);
+
+            constexpr int borderHeight = 8; // TODO: dynamic get with GetSystemMetrics(SM_CYFRAME) + GetSystemMetrics(SM_CXPADDEDBORDER)
+            int borderTop = window.top;
+            int borderBottom = window.top + borderHeight;
+            
+            if (borderTop <= pt.y && pt.y <= borderBottom)
+                return HTTOP; // top resize
+
             if (PtInRect(&dragMoveArea_, pt))
-                return HTCAPTION;
+                return HTCAPTION; // title bar (drag move, double-click maximize)
 
             if (PtInRect(&snapLayoutsArea_, pt))
-                return HTMAXBUTTON;
+                return HTMAXBUTTON; // maximize button (hover snap-layous, click rejected by WM_NCLBUTTONUP)
 
-            return HTCLIENT;
+            break;
         }
         case WM_PAINT:
         {
@@ -168,6 +170,7 @@ private:
             SelectObject(hdc, oldPen);
             DeleteObject(pen);
             DeleteObject(hfont);
+
             EndPaint(hwnd_, &ps);
         }
         break;
@@ -178,11 +181,33 @@ private:
         return DefWindowProc(hwnd_, msg, wp, lp);
     }
 
+    RECT getMonitorRectOr(RECT defRc)
+    {
+        HMONITOR monitor = MonitorFromWindow(hwnd_, MONITOR_DEFAULTTONULL);
+        if (monitor)
+        {
+            MONITORINFO info = { 0 };
+            info.cbSize = sizeof(MONITORINFO);
+            if (GetMonitorInfo(monitor, &info))
+                return info.rcWork;
+        }
+        return defRc;
+    }
+
+    static void debugPrint(LPCWSTR fmt, ...)
+    {
+        va_list args;
+        va_start(args, fmt);
+        WCHAR buf[512];
+        int len = wvsprintf(buf, fmt, args);
+        OutputDebugString(buf);
+        va_end(args);
+    }
+
 private:
     HWND hwnd_;
     RECT dragMoveArea_;
     RECT snapLayoutsArea_;
-    MARGINS resizeBorder_;
 };
 
 int WINAPI wWinMain(HINSTANCE hInstance,
