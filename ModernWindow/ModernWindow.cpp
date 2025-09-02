@@ -44,7 +44,7 @@ public:
         if (hwnd_)
         {
             SetWindowLongPtr(hwnd_, GWLP_USERDATA, (LONG_PTR)this); // bind this
-            // make WM_NCCALCSIZE message
+            SetWindowLongPtr(hwnd_, GWL_STYLE, WS_POPUP | WS_THICKFRAME | WS_MAXIMIZEBOX); // change style (after default pos and size or direct set pos and size)
             SetWindowPos(hwnd_, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOZORDER | SWP_FRAMECHANGED);
         }
         return hwnd_ != NULL;
@@ -105,9 +105,16 @@ private:
 
                 RECT origin = params->rgrc[0]; // origin is borderless
                 LRESULT defRet = DefWindowProc(hwnd_, msg, wp, lp);
-                params->rgrc[0].top = origin.top; // restore top borderless
+                params->rgrc[0].top = origin.top + 1; // restore top borderless
                 return defRet;
             }
+            break;
+        }
+        case WM_ACTIVATE:
+        {
+            RECT rect;
+            GetClientRect(hwnd_, &rect);
+            InvalidateRect(hwnd_, &rect, FALSE); // update window
             break;
         }
         case WM_NCLBUTTONDOWN:
@@ -133,6 +140,15 @@ private:
 
             constexpr int borderWidth = 8; // TODO: dynamic get with GetSystemMetrics(SM_CXFRAME) + GetSystemMetrics(SM_CXPADDEDBORDER)
             constexpr int borderHeight = 8; // TODO: dynamic get with GetSystemMetrics(SM_CYFRAME) + GetSystemMetrics(SM_CYPADDEDBORDER)
+
+            LRESULT defRet = DefWindowProc(hwnd_, msg, wp, lp);
+            if (defRet == HTTOPLEFT || defRet == HTTOPRIGHT)
+            {
+                if (window.top + borderHeight < pt.y)
+                    return defRet == HTTOPLEFT ? HTLEFT : HTRIGHT; // fix corner resize
+                return defRet;
+            }
+
             if (pt.y <= window.top + borderHeight)
             {
                 if (pt.x <= window.left + borderWidth)
@@ -157,19 +173,19 @@ private:
 
             HPEN pen = CreatePen(PS_SOLID, 1, RGB(188, 188, 188));
             HGDIOBJ oldPen = SelectObject(hdc, pen);
-
+            
             Rectangle(hdc, dragMoveArea_.left, dragMoveArea_.top, dragMoveArea_.right, dragMoveArea_.bottom);
             Rectangle(hdc, snapLayoutsArea_.left, snapLayoutsArea_.top, snapLayoutsArea_.right, snapLayoutsArea_.bottom);
-
+            
             LOGFONT font = { 0 };
             font.lfHeight = 16;
             wcscpy_s(font.lfFaceName, 16, L"Times New Roman");
             HFONT hfont = CreateFontIndirect(&font);
             HGDIOBJ oldFont = SelectObject(hdc, hfont);
-
+            
             DrawText(hdc, L"Drag move", -1, &dragMoveArea_, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
             DrawText(hdc, L"Snap layouts", -1, &snapLayoutsArea_, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-
+            
             SelectObject(hdc, oldFont);
             SelectObject(hdc, oldPen);
             DeleteObject(pen);
@@ -206,6 +222,48 @@ private:
         int len = wvsprintf(buf, fmt, args);
         OutputDebugString(buf);
         va_end(args);
+    }
+
+    enum class WindowsVersion
+    {
+        Unknown,
+        Windows7,
+        Windows8,
+        Windows8_1,
+        Windows10,
+        Windows11
+    };
+
+    static WindowsVersion getWindowsVersion()
+    {
+        static auto version = []()->WindowsVersion
+            {
+                int buildNumber = getWindowsBuildNumber();
+                if (buildNumber >= 22000) return WindowsVersion::Windows11;  // Win11
+                if (buildNumber >= 10240) return WindowsVersion::Windows10;  // Win10
+                if (buildNumber >= 9600)  return WindowsVersion::Windows8_1; // Win8.1
+                if (buildNumber >= 9200)  return WindowsVersion::Windows8;   // Win8
+                if (buildNumber >= 7600)  return WindowsVersion::Windows7;   // Win7
+                return WindowsVersion::Unknown;
+            }();
+        return version;
+    }
+
+    static int getWindowsBuildNumber()
+    {
+        HKEY hKey;
+        WCHAR data[8];
+        DWORD dataSize = sizeof(data);
+        int buildNumber = 0;
+
+        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion", 0, KEY_READ, &hKey) == ERROR_SUCCESS)
+        {
+            if (RegQueryValueExW(hKey, L"CurrentBuildNumber", NULL, NULL, (LPBYTE)data, &dataSize) == ERROR_SUCCESS)
+                buildNumber = wcstol(data, nullptr, 10);
+            RegCloseKey(hKey);
+        }
+
+        return buildNumber;
     }
 
 private:
