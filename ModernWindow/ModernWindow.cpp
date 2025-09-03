@@ -179,12 +179,14 @@ private:
             PAINTSTRUCT ps;
             HDC hdc = BeginPaint(hwnd_, &ps);
 
+            // fill title area background
+            RECT titleArea = { 0, 0, snapLayoutsArea_.right, snapLayoutsArea_.bottom };
+            HBRUSH bgBrush = (HBRUSH)(COLOR_WINDOWFRAME);
+            FillRect(hdc, &titleArea, bgBrush);
+
             HPEN pen = CreatePen(PS_SOLID, 1, RGB(188, 188, 188));
             HGDIOBJ oldPen = SelectObject(hdc, pen);
-            
-            Rectangle(hdc, dragMoveArea_.left, dragMoveArea_.top, dragMoveArea_.right, dragMoveArea_.bottom);
-            Rectangle(hdc, snapLayoutsArea_.left, snapLayoutsArea_.top, snapLayoutsArea_.right, snapLayoutsArea_.bottom);
-            
+
             LOGFONT font = { 0 };
             font.lfHeight = 16;
             wcscpy_s(font.lfFaceName, 16, L"Times New Roman");
