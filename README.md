@@ -1,10 +1,6 @@
 # ModernWindow
 
-A Windows10/11 Modern Frameless Window DEMO.
-
-It looks like Native window.
-
-
+This is a DEMO that make modern Windows 10/11 window using classic Win32 API.
 
 Features:
 
