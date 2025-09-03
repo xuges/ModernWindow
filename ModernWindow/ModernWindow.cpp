@@ -99,6 +99,23 @@ private:
 
             break;
         }
+        case WM_GETMINMAXINFO:
+        {
+            MINMAXINFO* info = (MINMAXINFO*)lp;
+            RECT rect =
+            {
+                info->ptMaxPosition.x,
+                info->ptMaxPosition.y,
+                info->ptMaxPosition.x + info->ptMaxSize.x,
+                info->ptMaxPosition.y + info->ptMaxSize.y
+            };
+            rect = getMonitorRectOr(rect);
+            info->ptMaxPosition.x = rect.left;
+            info->ptMaxPosition.y = rect.top;
+            info->ptMaxSize.x = rect.right - rect.left;
+            info->ptMaxSize.y = rect.bottom - rect.top;
+            return 0;
+        }
         case WM_NCCALCSIZE:
         {
             if (wp)
