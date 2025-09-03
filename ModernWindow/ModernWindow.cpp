@@ -176,7 +176,7 @@ private:
                 return defRet;
             }
 
-            if (pt.y <= window.top + borderHeight)
+            if (pt.y <= window.top + borderHeight && !IsMaximized(hwnd_))
             {
                 if (pt.x <= window.left + borderWidth)
                     return HTTOPLEFT; // top-left resize
