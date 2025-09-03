@@ -55,6 +55,14 @@ public:
         ShowWindow(hwnd_, SW_SHOWNORMAL);
         UpdateWindow(hwnd_);
     }
+
+    void update()
+    {
+        RECT rect;
+        GetClientRect(hwnd_, &rect);
+        InvalidateRect(hwnd_, &rect, FALSE);
+        UpdateWindow(hwnd_);
+    }
     
 private:
     static LRESULT CALLBACK windowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
@@ -112,12 +120,12 @@ private:
         }
         case WM_ACTIVATE:
         {
-            RECT rect;
-            GetClientRect(hwnd_, &rect);
-            InvalidateRect(hwnd_, &rect, FALSE); // update window
+            update();
             break;
         }
         case WM_NCLBUTTONDOWN:
+            update();
+            //fallthrough
         case WM_NCLBUTTONUP:
         {
             if (wp == HTMAXBUTTON)
