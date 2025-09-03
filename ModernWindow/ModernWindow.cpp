@@ -45,6 +45,8 @@ public:
         {
             SetWindowLongPtr(hwnd_, GWLP_USERDATA, (LONG_PTR)this); // bind this
             SetWindowLongPtr(hwnd_, GWL_STYLE, WS_POPUP | WS_THICKFRAME | WS_MAXIMIZEBOX); // change style (after default pos and size or direct set pos and size)
+            MARGINS margins = { 0,0,1,0 };
+            DwmExtendFrameIntoClientArea(hwnd_, &margins);
             SetWindowPos(hwnd_, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOZORDER | SWP_FRAMECHANGED);
         }
         return hwnd_ != NULL;
@@ -58,9 +60,7 @@ public:
 
     void update()
     {
-        RECT rect;
-        GetClientRect(hwnd_, &rect);
-        InvalidateRect(hwnd_, &rect, FALSE);
+        InvalidateRect(hwnd_, NULL, FALSE);
         UpdateWindow(hwnd_);
     }
     
@@ -124,8 +124,10 @@ private:
             break;
         }
         case WM_NCLBUTTONDOWN:
+        {
             update();
             //fallthrough
+        }
         case WM_NCLBUTTONUP:
         {
             if (wp == HTMAXBUTTON)
