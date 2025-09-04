@@ -101,19 +101,17 @@ private:
         }
         case WM_GETMINMAXINFO:
         {
-            MINMAXINFO* info = (MINMAXINFO*)lp;
-            RECT rect =
+            RECT rect = getMonitorWorkRect(hwnd_, MONITOR_DEFAULTTONEAREST, RECT{ 0 });
+            int width = rect.right - rect.left;
+            int height = rect.bottom - rect.top;
+            if (width && height)
             {
-                info->ptMaxPosition.x,
-                info->ptMaxPosition.y,
-                info->ptMaxPosition.x + info->ptMaxSize.x,
-                info->ptMaxPosition.y + info->ptMaxSize.y
-            };
-            rect = getMonitorRectOr(rect);
-            info->ptMaxPosition.x = rect.left;
-            info->ptMaxPosition.y = rect.top;
-            info->ptMaxSize.x = rect.right - rect.left;
-            info->ptMaxSize.y = rect.bottom - rect.top;
+                MINMAXINFO* info = (MINMAXINFO*)lp;
+                info->ptMaxPosition.x = 0;
+                info->ptMaxPosition.y = 0;
+                info->ptMaxSize.x = width;
+                info->ptMaxSize.y = height;
+            }
             return 0;
         }
         case WM_NCCALCSIZE:
@@ -124,7 +122,7 @@ private:
                 if (IsMaximized(hwnd_))
                 {
                     // use monitor rect for maximized
-                    params->rgrc[0] = getMonitorRectOr(params->rgrc[0]);
+                    params->rgrc[0] = getMonitorWorkRect(hwnd_, MONITOR_DEFAULTTONEAREST, params->rgrc[0]);
                     return 0;
                 }
 
@@ -230,9 +228,9 @@ private:
         return DefWindowProc(hwnd_, msg, wp, lp);
     }
 
-    RECT getMonitorRectOr(RECT defRc)
+    static RECT getMonitorWorkRect(HWND hwnd, int defMon, RECT defRect)
     {
-        HMONITOR monitor = MonitorFromWindow(hwnd_, MONITOR_DEFAULTTONULL);
+        HMONITOR monitor = MonitorFromWindow(hwnd, defMon);
         if (monitor)
         {
             MONITORINFO info = { 0 };
@@ -240,7 +238,7 @@ private:
             if (GetMonitorInfo(monitor, &info))
                 return info.rcWork;
         }
-        return defRc;
+        return defRect;
     }
 
     static void debugPrint(LPCWSTR fmt, ...)
