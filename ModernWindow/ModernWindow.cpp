@@ -44,9 +44,19 @@ public:
         if (hwnd_)
         {
             SetWindowLongPtr(hwnd_, GWLP_USERDATA, (LONG_PTR)this); // bind this
-            SetWindowLongPtr(hwnd_, GWL_STYLE, WS_POPUP | WS_THICKFRAME | WS_MAXIMIZEBOX); // change style (after default pos and size or direct set pos and size)
-            MARGINS margins = { 0,0,1,0 };
-            DwmExtendFrameIntoClientArea(hwnd_, &margins);
+            if (getWindowsVersion() >= WindowsVersion::Windows11)
+            {
+                // Windows 11 +
+                MARGINS margins = { 0,0,0,0 };
+                DwmExtendFrameIntoClientArea(hwnd_, &margins);
+            }
+            else
+            {
+                // Windows 10
+                SetWindowLongPtr(hwnd_, GWL_STYLE, WS_POPUP | WS_THICKFRAME | WS_MAXIMIZEBOX); // change style (after default pos and size or direct set pos and size)
+                MARGINS margins = { 0,0,1,0 };
+                DwmExtendFrameIntoClientArea(hwnd_, &margins);
+            }
             SetWindowPos(hwnd_, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOZORDER | SWP_FRAMECHANGED);
         }
         return hwnd_ != NULL;
@@ -128,7 +138,13 @@ private:
 
                 RECT origin = params->rgrc[0]; // origin is borderless
                 LRESULT defRet = DefWindowProc(hwnd_, msg, wp, lp);
-                params->rgrc[0].top = origin.top + 1; // restore top borderless
+
+                // restore top borderless
+                if (getWindowsVersion() >= WindowsVersion::Windows11)
+                    params->rgrc[0].top = origin.top;
+                else
+                    params->rgrc[0].top = origin.top + 1;
+
                 return defRet;
             }
             break;
